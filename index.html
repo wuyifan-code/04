@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>笨狗小柴 五子棋 v10.2.1 — 稳定修正版</title>
+  <title>笨狗小柴 五子棋 v10.2.1 — 稳定修正版（带倒计时与知识卡片抽牌）</title>
   <style>
     :root{
       --bg:#f6f3ee; --glass:rgba(255,255,255,0.62); --wood:#caa46b; --dark-wood:#8b6a3f;
@@ -51,6 +51,14 @@
     .k-quote{margin-top:8px;font-style:italic;color:#555}
     .k-meta{margin-top:10px;color:var(--muted);font-size:0.9rem}
     .confetti-canvas{position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:1220}
+    /* small piece badge next to player name */
+    .player-row{display:flex;align-items:center;gap:8px}
+    .piece-badge{width:18px;height:18px;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.12);flex:0 0 18px}
+    .badge-black{background:#000}
+    .badge-white{background:#fff;border:1px solid rgba(0,0,0,0.06)}
+    /* turn timer glow */
+    .turn-glow{animation:glowPulse 1s infinite}
+    @keyframes glowPulse{0%{box-shadow:0 0 0 rgba(192,138,63,0)}50%{box-shadow:0 0 20px rgba(192,138,63,0.4)}100%{box-shadow:0 0 0 rgba(192,138,63,0)}}
     @media (max-width:640px){.kcard{flex-direction:column;align-items:center}.k-avatar{width:96px;height:96px}}
   </style>
 </head>
@@ -96,7 +104,7 @@
                 <button id="saveNickBtn" class="pill primary">保存</button>
               </div>
               <div style="color:var(--muted)">当前昵称: <span id="myNick">-</span></div>
-              <div style="margin-top:12px;color:var(--muted)">说明：胜利后会弹出知识卡片，包含 AI 大师简介与名言。</div>
+              <div style="margin-top:12px;color:var(--muted)">说明：胜利后会弹出知识卡片，包含 AI 大师简介与名言（房间级随机抽取，出完再重置）。</div>
             </div>
           </div>
         </div>
@@ -107,8 +115,8 @@
         <div class="card" style="width:100%;max-width:1100px;display:flex;gap:12px;padding:12px">
           <div style="width:260px;display:flex;flex-direction:column;gap:12px">
             <div style="font-weight:900">玩家信息</div>
-            <div><strong id="blackName">黑方（空）</strong><div class="chat-meta" id="blackId"></div></div>
-            <div><strong id="whiteName">白方（空）</strong><div class="chat-meta" id="whiteId"></div></div>
+            <div class="player-row"><div class="piece-badge badge-black" aria-hidden="true"></div><strong id="blackName">黑方（空）</strong><div class="chat-meta" id="blackId"></div></div>
+            <div class="player-row"><div class="piece-badge badge-white" aria-hidden="true"></div><strong id="whiteName">白方（空）</strong><div class="chat-meta" id="whiteId"></div></div>
 
             <div style="margin-top:8px">
               <div style="font-weight:900">控制</div>
@@ -126,7 +134,7 @@
             <div style="width:100%;display:flex;justify-content:space-between;align-items:center">
               <div style="font-weight:900">对弈区</div>
               <div style="display:flex;align-items:center;gap:12px">
-                <div id="turnLabel" style="font-weight:800;color:var(--muted)">-</div>
+                <div id="turnLabel" style="font-weight:800;color:var(--muted);display:flex;align-items:center;gap:8px">- <span id="turnTimer" style="font-weight:900"></span></div>
                 <div id="moveCount" class="chat-meta">步: 0</div>
               </div>
             </div>
@@ -187,7 +195,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-analytics.js";
     import {
-      getDatabase, ref, push, set, onValue, onChildAdded, onChildRemoved, remove, get
+      getDatabase, ref, push, set, onValue, onChildAdded, onChildRemoved, remove, get, update
     } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-database.js";
 
     // ---------- Firebase config (你的配置) ----------
@@ -225,6 +233,7 @@
     const roomIdLabel = document.getElementById('roomIdLabel');
     const statusLabel = document.getElementById('statusLabel');
     const turnLabel = document.getElementById('turnLabel');
+    const turnTimerEl = document.getElementById('turnTimer');
     const moveCountLabel = document.getElementById('moveCount');
     const requestUndoBtn = document.getElementById('requestUndoBtn');
     const restartBtn = document.getElementById('restartBtn');
@@ -256,41 +265,18 @@
     let moveHistory = []; // {row,col,player,key}
     let appliedMoveKeys = new Set();
     let connected = false;
-    let lastKnownState = { currentPlayer: 'black', gameOver:false, winner:null, lastMoveKey:null };
+    let lastKnownState = { currentPlayer: 'black', gameOver:false, winner:null, lastMoveKey:null, turnExpiresAt: null };
     let lastRoomMeta = {};
     let unsubRooms=null, unsubPlayers=null, unsubMovesAdded=null, unsubMovesRemoved=null, unsubChatsAdded=null, unsubState=null, unsubUndoRequests=null, unsubConnected=null;
 
     // ---------- Knowledge cards (sample) ----------
     const knowledgeCards = [
-      {
-        id: 'feifei',
-        name: '李飞飞 (Fei-Fei Li)',
-        meta: '斯坦福大学 / 计算机视觉 领导者',
-        desc: 'ImageNet 是推动现代计算机视觉发展的关键资源。李飞飞在构建大型视觉数据集与推动视觉 AI 研究上影响深远。',
-        quote: '“当我们把机器教会看世界，我们也在重新理解人类如何看世界。”'
-      },
-      {
-        id: 'hinton',
-        name: 'Geoffrey Hinton',
-        meta: '深度学习奠基人与反向传播推广者',
-        desc: 'Hinton 在神经网络与深度学习方面的早期贡献奠定了现代 AI 的基础。他在反向传播和深度网络方面的工作催生了今天众多模型。',
-        quote: '“节省特征工程，让神经网络自己去学习。”'
-      },
-      {
-        id: 'bengio',
-        name: 'Yoshua Bengio',
-        meta: '蒙特利尔大学 / 深度学习研究员',
-        desc: 'Bengio 在概率模型、生成模型及神经网络优化方面做出大量贡献，是深度学习社区的重要人物之一。',
-        quote: '“学习如何学习是 AI 长远发展的关键。”'
-      },
-      {
-        id: 'demis',
-        name: 'Demis Hassabis',
-        meta: 'DeepMind 联合创始人',
-        desc: '将强化学习与大规模计算结合并应用于复杂对弈（如 AlphaGo）与科学发现任务，推动了智能系统的新方向。',
-        quote: '“把游戏解决掉，然后把那些学习带到现实世界。”'
-      }
+      { id: 'feifei', name: '李飞飞 (Fei-Fei Li)', meta: '斯坦福大学 / 计算机视觉 领导者', desc: 'ImageNet 是推动现代计算机视觉发展的关键资源。李飞飞在构建大型视觉数据集与推动视觉 AI 研究上影响深远。', quote: '当我们把机器教会看世界，我们也在重新理解人类如何看世界。' },
+      { id: 'hinton', name: 'Geoffrey Hinton', meta: '深度学习奠基人与反向传播推广者', desc: 'Hinton 在神经网络与深度学习方面的早期贡献奠定了现代 AI 的基础。他在反向传播和深度网络方面的工作催生了今天众多模型。', quote: '节省特征工程，让神经网络自己去学习。' },
+      { id: 'bengio', name: 'Yoshua Bengio', meta: '蒙特利尔大学 / 深度学习研究员', desc: 'Bengio 在概率模型、生成模型及神经网络优化方面做出大量贡献，是深度学习社区的重要人物之一。', quote: '学习如何学习是 AI 长远发展的关键。' },
+      { id: 'demis', name: 'Demis Hassabis', meta: 'DeepMind 联合创始人', desc: '将强化学习与大规模计算结合并应用于复杂对弈（如 AlphaGo）与科学发现任务，推动了智能系统的新方向。', quote: '把游戏解决掉，然后把那些学习带到现实世界。' }
     ];
+    const cardMap = Object.fromEntries(knowledgeCards.map(c=>[c.id,c]));
 
     // ---------- Helpers ----------
     function dbRef(path){ return ref(db, path); }
@@ -358,13 +344,12 @@
       return null;
     }
 
-    // ---------- Connection monitor (fixed init & behavior) ----------
+    // ---------- Connection monitor ----------
     function startConnectionMonitor(){
       try{ if (unsubConnected) unsubConnected(); }catch(e){}
       const connRef = dbRef('.info/connected');
       unsubConnected = onValue(connRef, (snap)=>{
         const val = snap.val();
-        // val may be null on some envs -> treat null as false but keep explicit behavior
         connected = !!val;
         if (connected){
           connDot.style.background = 'var(--online)';
@@ -384,7 +369,6 @@
     // ---------- Rooms list ----------
     function startRoomsListener(){
       try{ if (unsubRooms) unsubRooms(); }catch(e){}
-      // onValue returns an unsubscribe function; store it so we can stop it
       unsubRooms = onValue(dbRef('rooms'), snap=>{
         const data = snap.val() || {};
         renderRoomsList(data);
@@ -424,6 +408,7 @@
       unsubPlayers = unsubState = unsubMovesAdded = unsubMovesRemoved = unsubChatsAdded = unsubUndoRequests = null;
       appliedMoveKeys = new Set();
       moveHistory = [];
+      stopLocalTurnTimer();
     }
 
     function startRoomListeners(id){
@@ -447,6 +432,8 @@
           hideVictory();
         }
         updateUIStats();
+        // if turnExpiresAt present, start countdown
+        if (lastKnownState.turnExpiresAt) startLocalTurnTimer(lastKnownState.turnExpiresAt, lastKnownState.currentPlayer);
       });
 
       // moves added
@@ -512,6 +499,8 @@
               await remove(dbRef(`rooms/${myRoomId}/moves/${lastKey}`));
               await set(dbRef(`rooms/${myRoomId}/requests/undo/${key}/status`), 'accepted');
               await set(dbRef(`rooms/${myRoomId}/state/currentPlayer`), lastMove.player);
+              // also set turnExpiresAt anew
+              await set(dbRef(`rooms/${myRoomId}/state/turnExpiresAt`), Date.now() + 20000);
               await push(dbRef(`rooms/${myRoomId}/chats`), { nick:'系统', text: `${myNick||'玩家'} 同意并撤销了 ${req.nick||'对方'} 的最后一步。`, timestamp: Date.now() });
             } else {
               await set(dbRef(`rooms/${myRoomId}/requests/undo/${key}/status`), 'rejected');
@@ -553,7 +542,7 @@
       const metaSnap = await get(dbRef(`rooms/${roomId}/meta`));
       lastRoomMeta = metaSnap.val() || {};
       const stateSnap = await get(dbRef(`rooms/${roomId}/state`));
-      lastKnownState = stateSnap.val() || lastKnownState;
+      lastKnownState = Object.assign({}, lastKnownState, stateSnap.val() || {});
       updateUIStats();
       renderChatOnce(roomId);
     }
@@ -589,24 +578,91 @@
       push(dbRef(`rooms/${myRoomId}/chats`), { nick:'系统', text: msg, timestamp: Date.now() }).catch(()=>{});
     }
 
+    // ---------- Turn timer (local) ----------
+    let localTimerId = null;
+    let localBeepCtx = null;
+    function startLocalTurnTimer(turnExpiresAt, currentPlayer){
+      stopLocalTurnTimer();
+      const tick = ()=>{
+        const now = Date.now();
+        const remaining = Math.max(0, Math.ceil((turnExpiresAt - now)/1000));
+        turnTimerEl.textContent = remaining > 0 ? `${remaining}s` : '0s';
+        // last 5 seconds visual+sound cues
+        if (remaining <= 5 && remaining > 0){
+          turnLabel.classList.add('turn-glow');
+          playBeep(remaining); // play beep for each second (best-effort)
+        } else {
+          turnLabel.classList.remove('turn-glow');
+        }
+        if (now >= turnExpiresAt){
+          stopLocalTurnTimer();
+          turnTimerEl.textContent = '0s';
+          // auto-skip: attempt to switch turn (only one client will succeed in writing)
+          handleTurnTimeout(currentPlayer).catch(()=>{});
+          return;
+        }
+        localTimerId = setTimeout(tick, 300);
+      };
+      tick();
+    }
+    function stopLocalTurnTimer(){
+      if (localTimerId) clearTimeout(localTimerId);
+      localTimerId = null;
+      turnLabel.classList.remove('turn-glow');
+    }
+    function playBeep(whichSecond){
+      try {
+        if (!localBeepCtx) localBeepCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = localBeepCtx;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = 600 + (whichSecond*40);
+        o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.001, ctx.currentTime);
+        g.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+        o.start();
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+        o.stop(ctx.currentTime + 0.2);
+      } catch(e){ /* ignore audio errors */ }
+    }
+
+    // Called when turn timer reaches zero - try to advance turn
+    async function handleTurnTimeout(expiredPlayer){
+      if (!myRoomId) return;
+      try {
+        const stateSnap = await get(dbRef(`rooms/${myRoomId}/state`));
+        const s = stateSnap.val() || {};
+        // If still same player and not gameOver, switch
+        if (s.currentPlayer === expiredPlayer && !s.gameOver){
+          const next = (expiredPlayer === 'black') ? 'white' : 'black';
+          // set new currentPlayer and new turnExpiresAt (20s)
+          await set(dbRef(`rooms/${myRoomId}/state`), { currentPlayer: next, gameOver: false, winner: null, lastMoveKey: s.lastMoveKey || null, turnExpiresAt: Date.now() + 20000 });
+          await push(dbRef(`rooms/${myRoomId}/chats`), { nick:'系统', text: `${expiredPlayer === 'black' ? '黑方' : '白方'} 超时未下，回合自动转给 ${next === 'black' ? '黑方' : '白方'}。`, timestamp: Date.now() });
+        }
+      } catch(e){ console.warn('timeout advance err', e); }
+    }
+
     // ---------- Interactions ----------
     createRoomBtn.addEventListener('click', async ()=>{
       if (!myNick) return alert('请先设置昵称');
-      // stop rooms listener temporarily to avoid double-render / race
       try { if (typeof unsubRooms === 'function') { unsubRooms(); unsubRooms = null; } } catch(e){}
       const id = (roomInput.value && roomInput.value.trim()) ? roomInput.value.trim().toUpperCase() : generateRoomId();
       const roomRef = dbRef(`rooms/${id}`);
       const snap = await get(roomRef);
       if (snap.exists()){
         alert('房间已存在，请换个房间号');
-        // restart rooms listener if stopped
         try { if (!unsubRooms) startRoomsListener(); } catch(e){}
         return;
       }
+      // create room: set meta, initial state including turnExpiresAt, and initialize deckRemaining shuffled
+      const deck = shuffleArray(knowledgeCards.map(c=>c.id));
       await set(roomRef, { createdAt: Date.now(), id, createdBy: myClientId });
       await set(dbRef(`rooms/${id}/meta`), { ownerId: myClientId, ownerNick: myNick });
-      await set(dbRef(`rooms/${id}/state`), { currentPlayer:'black', gameOver:false, winner:null, lastMoveKey:null });
+      await set(dbRef(`rooms/${id}/state`), { currentPlayer:'black', gameOver:false, winner:null, lastMoveKey:null, turnExpiresAt: Date.now() + 20000 });
       await set(dbRef(`rooms/${id}/players/${myClientId}`), { slot:'black', clientId: myClientId, nick: myNick, joinedAt: Date.now() });
+      // write deckRemaining to DB (room-level)
+      await set(dbRef(`rooms/${id}/deckRemaining`), deck);
       myRoomId = id; mySlot = 'black'; lastRoomMeta = { ownerId: myClientId, ownerNick: myNick };
       startRoomListeners(id);
       await applyInitialRoomState(id);
@@ -646,12 +702,15 @@
       try {
         const pushRef = await push(dbRef(`rooms/${myRoomId}/moves`), { row:r, col:c, player:mySlot, clientId: myClientId, nick: myNick, timestamp: Date.now() });
         const next = (mySlot === 'black') ? 'white' : 'black';
-        await set(dbRef(`rooms/${myRoomId}/state/currentPlayer`), next);
-        await set(dbRef(`rooms/${myRoomId}/state/lastMoveKey`), pushRef.key);
+        // update state: currentPlayer, lastMoveKey, and turnExpiresAt (20s from now)
+        await set(dbRef(`rooms/${myRoomId}/state`), { currentPlayer: next, gameOver:false, winner:null, lastMoveKey: pushRef.key, turnExpiresAt: Date.now() + 20000 });
         const coords = checkWinAndReturnCoords(r,c,mySlot);
         if (coords){
-          await set(dbRef(`rooms/${myRoomId}/state`), { currentPlayer: next, gameOver:true, winner: mySlot, lastMoveKey: pushRef.key });
+          // winner: set state.gameOver true and also trigger knowledge card flow by setting winner and leaving deck handling to fetchAndShowKnowledgeCard
+          await set(dbRef(`rooms/${myRoomId}/state`), { currentPlayer: next, gameOver:true, winner: mySlot, lastMoveKey: pushRef.key, turnExpiresAt: null });
           await push(dbRef(`rooms/${myRoomId}/chats`), { nick: '系统', text: `${myNick||'某玩家'} 获胜！`, timestamp: Date.now() });
+          // now manage card: pop from deckRemaining and set lastKnowledge
+          await fetchAndAssignKnowledgeCard(myRoomId, mySlot);
         }
       } catch(e){
         console.error('push move err', e);
@@ -680,7 +739,7 @@
       if (!confirm('确认重开？')) return;
       try {
         await remove(dbRef(`rooms/${myRoomId}/moves`));
-        await set(dbRef(`rooms/${myRoomId}/state`), { currentPlayer:'black', gameOver:false, winner:null, lastMoveKey:null });
+        await set(dbRef(`rooms/${myRoomId}/state`), { currentPlayer:'black', gameOver:false, winner:null, lastMoveKey:null, turnExpiresAt: Date.now() + 20000 });
         await remove(dbRef(`rooms/${myRoomId}/chats`));
         resetLocalBoard();
         appendSystemChat('房主已重开新的对局');
@@ -702,32 +761,47 @@
     function showVictoryFromState(winner){
       if (!winner) return;
       victoryMessage.textContent = `${winner === 'black' ? '黑方' : '白方'} 获胜！`;
-      // show victory modal
       victoryModal.style.display = 'block';
-      // play sound
       playVictorySound();
-      // confetti
       startConfetti();
-      // auto show knowledge card after short delay
-      setTimeout(()=> {
-        showKnowledgeCard();
+      // Try to show knowledge modal if lastKnowledge exists in DB
+      setTimeout(async ()=>{
+        const lkSnap = await get(dbRef(`rooms/${myRoomId}/lastKnowledge`));
+        if (lkSnap.exists()){
+          const obj = lkSnap.val();
+          showKnowledgeCardFromDB(obj);
+        } else {
+          // fallback: show local random
+          showKnowledgeCard();
+        }
       }, 900);
     }
     function hideVictory(){ victoryModal.style.display = 'none'; stopConfetti(); }
 
     closeVictoryBtn.addEventListener('click', ()=>{ hideVictory(); });
 
-    // show knowledge modal picking random card
+    // show knowledge modal picking random card (fallback only)
     function showKnowledgeCard(){
       const card = knowledgeCards[Math.floor(Math.random()*knowledgeCards.length)];
       if (!card) return;
-      // fill modal
       kAvatar.textContent = card.name.split(' ').map(s=>s[0]).slice(0,2).join('');
       kName.textContent = card.name;
       kMeta.textContent = card.meta;
       kDesc.textContent = card.desc;
       kQuote.textContent = `“${card.quote}”`;
-      // show
+      knowledgeModal.classList.add('show');
+      knowledgeModal.style.display = 'block';
+    }
+    // show knowledge card using an object retrieved from room.lastKnowledge
+    function showKnowledgeCardFromDB(obj){
+      if (!obj || !obj.cardId) return showKnowledgeCard();
+      const card = cardMap[obj.cardId];
+      if (!card) return showKnowledgeCard();
+      kAvatar.textContent = card.name.split(' ').map(s=>s[0]).slice(0,2).join('');
+      kName.textContent = card.name + (obj.recipient ? ` （展示：${obj.recipient === 'black' ? '黑方' : '白方'}）` : '');
+      kMeta.textContent = card.meta;
+      kDesc.textContent = card.desc;
+      kQuote.textContent = `“${card.quote}”`;
       knowledgeModal.classList.add('show');
       knowledgeModal.style.display = 'block';
     }
@@ -736,7 +810,10 @@
       const text = `${kName.textContent}\n${kMeta.textContent}\n\n${kDesc.textContent}\n\n${kQuote.textContent}`;
       navigator.clipboard?.writeText(text).then(()=> alert('已复制到剪贴板'), ()=> alert('复制失败'));
     });
-    showKnowledgeBtn.addEventListener('click', showKnowledgeCard);
+    showKnowledgeBtn.addEventListener('click', async ()=>{
+      const lkSnap = await get(dbRef(`rooms/${myRoomId}/lastKnowledge`));
+      if (lkSnap.exists()) showKnowledgeCardFromDB(lkSnap.val()); else showKnowledgeCard();
+    });
 
     // ---------- Confetti (simple canvas) ----------
     const confettiCtx = confettiCanvas.getContext && confettiCanvas.getContext('2d');
@@ -783,7 +860,7 @@
       requestAnimationFrame(confettiFrame);
     }
 
-    // ---------- Victory sound (WebAudio short cheer) ----------
+    // ---------- Victory sound ----------
     function playVictorySound(){
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -800,6 +877,36 @@
       } catch(e){ console.warn('audio err', e); }
     }
 
+    // ---------- Deck / knowledge management ----------
+    // shuffle helper
+    function shuffleArray(arr){
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // When a victory occurs, pop one card from rooms/{id}/deckRemaining and set rooms/{id}/lastKnowledge
+    async function fetchAndAssignKnowledgeCard(roomId, winnerSlot){
+      try {
+        const deckSnap = await get(dbRef(`rooms/${roomId}/deckRemaining`));
+        let deck = deckSnap.exists() ? (deckSnap.val() || []) : [];
+        // if deck missing or empty, reinitialize as shuffled full deck
+        if (!deck || deck.length === 0){
+          deck = shuffleArray(knowledgeCards.map(c=>c.id));
+        }
+        const cardId = deck.shift(); // take first
+        // randomly choose recipient side (双方随机出现)
+        const recipient = Math.random() < 0.5 ? 'black' : 'white';
+        // write back deckRemaining and lastKnowledge
+        await set(dbRef(`rooms/${roomId}/deckRemaining`), deck);
+        await set(dbRef(`rooms/${roomId}/lastKnowledge`), { cardId, recipient, assignedAt: Date.now(), assignedBy: myClientId, winner: winnerSlot });
+        // if deck is now empty after pop, we keep it empty until next cycle; when someone needs a new deck we reinit (above)
+      } catch(e){ console.warn('assign knowledge err', e); }
+    }
+
     // ---------- Join / create / leave / listeners bootstrap ----------
     function enterGameScene(){ document.getElementById('lobbyScene').classList.remove('visible'); document.getElementById('gameScene').classList.add('visible'); updateUIStats(); }
     function exitGameScene(){ document.getElementById('gameScene').classList.remove('visible'); document.getElementById('lobbyScene').classList.add('visible'); }
@@ -807,16 +914,17 @@
     async function joinRoom(requestedRoomId){
       if (!myNick) return alert('请先设置昵称');
       if (myRoomId) await leaveRoom();
-      // stop rooms listener temporarily to avoid double-render / race
       try { if (typeof unsubRooms === 'function') { unsubRooms(); unsubRooms = null; } } catch(e){}
       const id = (requestedRoomId && requestedRoomId.trim()) ? requestedRoomId.trim().toUpperCase() : generateRoomId();
       myRoomId = id;
       const roomRef = dbRef(`rooms/${id}`);
       const snap = await get(roomRef);
       if (!snap.exists()){
+        // if room not exists create with deck
         await set(roomRef, { createdAt: Date.now(), id, createdBy: myClientId });
         await set(dbRef(`rooms/${id}/meta`), { ownerId: myClientId, ownerNick: myNick });
-        await set(dbRef(`rooms/${id}/state`), { currentPlayer:'black', gameOver:false, winner:null, lastMoveKey:null });
+        await set(dbRef(`rooms/${id}/state`), { currentPlayer:'black', gameOver:false, winner:null, lastMoveKey:null, turnExpiresAt: Date.now() + 20000 });
+        await set(dbRef(`rooms/${id}/deckRemaining`), shuffleArray(knowledgeCards.map(c=>c.id)));
       } else {
         const metaSnap = await get(dbRef(`rooms/${id}/meta`));
         if (!metaSnap.exists()){
@@ -845,14 +953,16 @@
       myRoomId = null; mySlot = null;
       resetLocalBoard();
       exitGameScene();
-      // restart lobby listener
       startRoomsListener();
     }
 
     // ---------- Event bindings ----------
     document.getElementById('btnGotoLobby').addEventListener('click', ()=> exitGameScene());
     document.getElementById('btnGotoGame').addEventListener('click', ()=> { if (!myRoomId) return alert('请先创建或进入房间'); enterGameScene(); });
-    document.getElementById('showKnowledgeBtn').addEventListener('click', showKnowledgeCard);
+    document.getElementById('showKnowledgeBtn').addEventListener('click', async ()=>{
+      const lkSnap = await get(dbRef(`rooms/${myRoomId}/lastKnowledge`));
+      if (lkSnap.exists()) showKnowledgeCardFromDB(lkSnap.val()); else showKnowledgeCard();
+    });
 
     // ---------- Bootstrapping ----------
     (async function bootstrap(){
@@ -872,6 +982,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 
