@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>笨狗小柴 五子棋 v10.2.1 — 稳定修正版</title>
+  <style>
+    :root{
+      --bg:#f6f3ee; --glass:rgba(255,255,255,0.62); --wood:#caa46b; --dark-wood:#8b6a3f;
+      --text:#2e2e2e; --muted:#7b6a5c; --accent:#c08a3f; --radius:18px; --shadow:0 12px 40px rgba(0,0,0,0.12);
+      --online:#2ecc71; --offline:#e74c3c;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;font-family:"SF Pro Display","PingFang SC",system-ui,Arial;background:radial-gradient(circle at 10% 10%, #fffaf4,#f0e7db);color:var(--text);display:flex;flex-direction:column;align-items:center}
+    .container{width:100%;max-width:1200px;padding:18px;display:flex;flex-direction:column;gap:12px;align-items:center}
+    .topbar{width:100%;display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,255,255,0.82));box-shadow:var(--shadow);border:1px solid rgba(0,0,0,0.04)}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:48px;height:48px;border-radius:12px;background:linear-gradient(180deg,var(--accent),#b46d2f);display:flex;align-items:center;justify-content:center;color:white;font-weight:800}
+    .nav{display:flex;gap:8px;align-items:center}
+    .nav .pill{padding:8px 12px;border-radius:10px;border:0;cursor:pointer;font-weight:700;background:white;border:1px solid rgba(0,0,0,0.06)}
+    .status-dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-right:8px}
+    .scenes{width:100%;display:flex;justify-content:center}
+    .scene{width:100%;display:none}
+    .scene.visible{display:block}
+    .card{backdrop-filter:blur(14px);background:var(--glass);border-radius:16px;padding:18px;border:1px solid rgba(255,255,255,0.5);box-shadow:0 10px 30px rgba(0,0,0,0.06)}
+    .pill{padding:9px 14px;border-radius:999px;border:0;cursor:pointer;font-weight:800}
+    .pill.primary{background:linear-gradient(180deg,var(--accent),var(--dark-wood));color:white}
+    .pill.ghost{background:white;border:1px solid rgba(0,0,0,0.06)}
+    .board{width:640px;height:640px;border-radius:12px;background:linear-gradient(180deg,#ead5b5,#d4b88c);border:6px solid rgba(202,164,107,0.9);display:grid;grid-template-columns:repeat(15,1fr);grid-template-rows:repeat(15,1fr);box-shadow:0 18px 70px rgba(0,0,0,0.12);position:relative;overflow:hidden}
+    .cell{position:relative;cursor:pointer;user-select:none}
+    .cell::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(0,0,0,0.18);transform:translateY(-50%)}
+    .cell::after{content:'';position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(0,0,0,0.18);transform:translateX(-50%)}
+    .piece{width:82%;height:82%;border-radius:50%;margin:auto;transform:scale(0.01);transition:transform 220ms cubic-bezier(.2,.9,.2,1),box-shadow 200ms;box-shadow:0 6px 20px rgba(0,0,0,0.28),inset 0 4px 10px rgba(255,255,255,0.06)}
+    .piece.drop{transform:scale(1)}
+    .black{background:radial-gradient(circle at 30% 25%,#3f3f3f,#000)}
+    .white{background:radial-gradient(circle at 30% 25%,#fff,#eee);border:1px solid rgba(0,0,0,0.06)}
+    .winning-piece{box-shadow:0 0 40px 10px rgba(192,138,63,0.14),0 8px 40px rgba(0,0,0,0.26);animation:winPulse 1.6s infinite}
+    @keyframes winPulse{0%{transform:scale(1)}50%{transform:scale(1.04)}100%{transform:scale(1)}}
+    .chat-log{height:46vh;overflow:auto;padding:10px;background:linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,255,255,0.88));border-radius:10px;border:1px solid rgba(0,0,0,0.04)}
+    .chat-row{margin-bottom:8px}
+    .chat-meta{color:var(--muted);font-size:0.82rem}
+    #victoryModal{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1200}
+    #victoryModal .modal{background:#fffaf5;padding:18px;border-radius:12px;box-shadow:0 30px 80px rgba(0,0,0,0.16);text-align:center}
+    /* knowledge card modal */
+    #knowledgeModal{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.98);z-index:1250;transition:all 220ms ease}
+    #knowledgeModal.show{display:block;transform:translate(-50%,-50%) scale(1)}
+    .kcard{width:560px;max-width:92vw;background:linear-gradient(180deg,rgba(255,255,255,0.98),#fff);border-radius:14px;padding:18px;box-shadow:0 30px 80px rgba(0,0,0,0.18);display:flex;gap:12px;align-items:flex-start}
+    .k-avatar{width:120px;height:120px;border-radius:12px;flex:0 0 120px;background:linear-gradient(180deg,#fff,#f3f3f3);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px}
+    .k-body{flex:1}
+    .k-name{font-weight:900;font-size:1.1rem}
+    .k-quote{margin-top:8px;font-style:italic;color:#555}
+    .k-meta{margin-top:10px;color:var(--muted);font-size:0.9rem}
+    .confetti-canvas{position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:1220}
+    @media (max-width:640px){.kcard{flex-direction:column;align-items:center}.k-avatar{width:96px;height:96px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">柴</div>
+        <div>
+          <div style="font-weight:900">笨狗小柴 五子棋</div>
+          <div style="color:var(--muted);font-size:0.9rem">v10.2.1 · 稳定修正版</div>
+        </div>
+      </div>
+
+      <div class="nav">
+        <div id="connectionStatus" style="display:flex;align-items:center;margin-right:12px">
+          <span id="connDot" class="status-dot" style="background:var(--offline)"></span>
+          <span id="connText" style="color:var(--muted)">连接中...</span>
+        </div>
+        <div style="width:12px"></div>
+        <button id="btnGotoLobby" class="pill ghost">大厅</button>
+        <button id="btnGotoGame" class="pill ghost">对弈</button>
+      </div>
+    </div>
+
+    <div class="scenes">
+      <!-- LOBBY -->
+      <div id="lobbyScene" class="scene visible">
+        <div class="card" style="width:100%;max-width:1000px">
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <div style="display:flex;gap:8px;align-items:center">
+                <input id="roomInput" placeholder="房间号（可留空随机）" style="flex:1;padding:10px;border-radius:10px;border:1px solid rgba(0,0,0,0.06)" />
+                <button id="createRoomBtn" class="pill primary">创建</button>
+                <button id="refreshRoomsBtn" class="pill ghost">刷新</button>
+              </div>
+              <div id="roomsList" style="margin-top:14px;max-height:60vh;overflow:auto"></div>
+            </div>
+            <div style="width:320px;display:flex;flex-direction:column;gap:8px">
+              <div style="font-weight:900">昵称</div>
+              <div style="display:flex;gap:8px">
+                <input id="nickInput" placeholder="例如：阿一" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.06)" />
+                <button id="saveNickBtn" class="pill primary">保存</button>
+              </div>
+              <div style="color:var(--muted)">当前昵称: <span id="myNick">-</span></div>
+              <div style="margin-top:12px;color:var(--muted)">说明：胜利后会弹出知识卡片，包含 AI 大师简介与名言。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- GAME -->
+      <div id="gameScene" class="scene">
+        <div class="card" style="width:100%;max-width:1100px;display:flex;gap:12px;padding:12px">
+          <div style="width:260px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-weight:900">玩家信息</div>
+            <div><strong id="blackName">黑方（空）</strong><div class="chat-meta" id="blackId"></div></div>
+            <div><strong id="whiteName">白方（空）</strong><div class="chat-meta" id="whiteId"></div></div>
+
+            <div style="margin-top:8px">
+              <div style="font-weight:900">控制</div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button id="restartBtn" class="pill ghost">重开</button>
+                <button id="requestUndoBtn" class="pill ghost">申请悔棋</button>
+                <button id="leaveBtn" class="pill ghost">退出</button>
+              </div>
+              <div style="margin-top:8px;color:var(--muted)">房间: <span id="roomIdLabel">-</span></div>
+              <div style="margin-top:6px;color:var(--muted)">房主: <span id="ownerLabel">-</span></div>
+            </div>
+          </div>
+
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px;align-items:center">
+            <div style="width:100%;display:flex;justify-content:space-between;align-items:center">
+              <div style="font-weight:900">对弈区</div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <div id="turnLabel" style="font-weight:800;color:var(--muted)">-</div>
+                <div id="moveCount" class="chat-meta">步: 0</div>
+              </div>
+            </div>
+
+            <div class="board" id="board"></div>
+          </div>
+
+          <div style="width:320px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-weight:900">聊天</div>
+              <div class="chat-meta" id="statusLabel">未在房间</div>
+            </div>
+            <div id="chatLog" class="chat-log"></div>
+            <div style="display:flex;gap:8px">
+              <input id="chatInput" placeholder="输入消息…" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.06)" />
+              <button id="sendChatBtn" class="pill primary">发送</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- confetti canvas -->
+  <canvas id="confettiCanvas" class="confetti-canvas"></canvas>
+
+  <!-- victory modal (simple) -->
+  <div id="victoryModal">
+    <div class="modal card" style="text-align:center;padding:18px;position:relative;">
+      <h2 style="margin:0 0 8px 0">🎉 获胜！</h2>
+      <div id="victoryMessage" style="font-weight:900;margin-bottom:12px"></div>
+      <div style="display:flex;gap:10px;justify-content:center">
+        <button id="showKnowledgeBtn" class="pill primary">查看知识卡片</button>
+        <button id="closeVictoryBtn" class="pill ghost">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- knowledge modal -->
+  <div id="knowledgeModal">
+    <div class="kcard">
+      <div class="k-avatar" id="kAvatar" aria-hidden="true">AI</div>
+      <div class="k-body">
+        <div class="k-name" id="kName">名字</div>
+        <div class="k-meta" id="kMeta">职称 · 年份</div>
+        <div class="k-desc" id="kDesc" style="margin-top:8px;color:#333">简介</div>
+        <div class="k-quote" id="kQuote">“名言”</div>
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+          <button id="shareKBtn" class="pill primary">复制卡片文本</button>
+          <button id="closeKBtn" class="pill ghost">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // ---------- Firebase imports ----------
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-analytics.js";
+    import {
+      getDatabase, ref, push, set, onValue, onChildAdded, onChildRemoved, remove, get
+    } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-database.js";
+
+    // ---------- Firebase config (你的配置) ----------
+    const firebaseConfig = {
+      apiKey: "AIzaSyCLeUHDLnxpd05HnioDdtOPKa5kMW4LQCE",
+      authDomain: "wuyifan-code04.firebaseapp.com",
+      projectId: "wuyifan-code04",
+      storageBucket: "wuyifan-code04.firebasestorage.app",
+      messagingSenderId: "1048037918553",
+      appId: "1:1048037918553:web:8ed5388ba1ed7fb677ae48",
+      measurementId: "G-3RTKTGRSJW",
+      databaseURL: "https://wuyifan-code04-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    try { getAnalytics(app); } catch(e) { /* ignore */ }
+    const db = getDatabase(app);
+
+    // ---------- DOM refs ----------
+    const connDot = document.getElementById('connDot');
+    const connText = document.getElementById('connText');
+    const roomsList = document.getElementById('roomsList');
+    const createRoomBtn = document.getElementById('createRoomBtn');
+    const refreshRoomsBtn = document.getElementById('refreshRoomsBtn');
+    const roomInput = document.getElementById('roomInput');
+    const nickInput = document.getElementById('nickInput');
+    const saveNickBtn = document.getElementById('saveNickBtn');
+    const myNickLabel = document.getElementById('myNick');
+    const boardEl = document.getElementById('board');
+    const blackName = document.getElementById('blackName');
+    const whiteName = document.getElementById('whiteName');
+    const blackId = document.getElementById('blackId');
+    const whiteId = document.getElementById('whiteId');
+    const ownerLabel = document.getElementById('ownerLabel');
+    const roomIdLabel = document.getElementById('roomIdLabel');
+    const statusLabel = document.getElementById('statusLabel');
+    const turnLabel = document.getElementById('turnLabel');
+    const moveCountLabel = document.getElementById('moveCount');
+    const requestUndoBtn = document.getElementById('requestUndoBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const leaveBtn = document.getElementById('leaveBtn');
+    const chatLog = document.getElementById('chatLog');
+    const chatInput = document.getElementById('chatInput');
+    const sendChatBtn = document.getElementById('sendChatBtn');
+    const victoryModal = document.getElementById('victoryModal');
+    const victoryMessage = document.getElementById('victoryMessage');
+    const showKnowledgeBtn = document.getElementById('showKnowledgeBtn');
+    const closeVictoryBtn = document.getElementById('closeVictoryBtn');
+    const knowledgeModal = document.getElementById('knowledgeModal');
+    const kAvatar = document.getElementById('kAvatar');
+    const kName = document.getElementById('kName');
+    const kMeta = document.getElementById('kMeta');
+    const kDesc = document.getElementById('kDesc');
+    const kQuote = document.getElementById('kQuote');
+    const shareKBtn = document.getElementById('shareKBtn');
+    const closeKBtn = document.getElementById('closeKBtn');
+    const confettiCanvas = document.getElementById('confettiCanvas');
+
+    // ---------- State ----------
+    const boardSize = 15;
+    let myClientId = 'u_' + Math.random().toString(36).slice(2,9);
+    let myNick = localStorage.getItem('g_nick') || null;
+    let myRoomId = null;
+    let mySlot = null;
+    let board = [];
+    let moveHistory = []; // {row,col,player,key}
+    let appliedMoveKeys = new Set();
+    let connected = false;
+    let lastKnownState = { currentPlayer: 'black', gameOver:false, winner:null, lastMoveKey:null };
+    let lastRoomMeta = {};
+    let unsubRooms=null, unsubPlayers=null, unsubMovesAdded=null, unsubMovesRemoved=null, unsubChatsAdded=null, unsubState=null, unsubUndoRequests=null, unsubConnected=null;
+
+    // ---------- Knowledge cards (sample) ----------
+    const knowledgeCards = [
+      {
+        id: 'feifei',
+        name: '李飞飞 (Fei-Fei Li)',
+        meta: '斯坦福大学 / 计算机视觉 领导者',
+        desc: 'ImageNet 是推动现代计算机视觉发展的关键资源。李飞飞在构建大型视觉数据集与推动视觉 AI 研究上影响深远。',
+        quote: '“当我们把机器教会看世界，我们也在重新理解人类如何看世界。”'
+      },
+      {
+        id: 'hinton',
+        name: 'Geoffrey Hinton',
+        meta: '深度学习奠基人与反向传播推广者',
+        desc: 'Hinton 在神经网络与深度学习方面的早期贡献奠定了现代 AI 的基础。他在反向传播和深度网络方面的工作催生了今天众多模型。',
+        quote: '“节省特征工程，让神经网络自己去学习。”'
+      },
+      {
+        id: 'bengio',
+        name: 'Yoshua Bengio',
+        meta: '蒙特利尔大学 / 深度学习研究员',
+        desc: 'Bengio 在概率模型、生成模型及神经网络优化方面做出大量贡献，是深度学习社区的重要人物之一。',
+        quote: '“学习如何学习是 AI 长远发展的关键。”'
+      },
+      {
+        id: 'demis',
+        name: 'Demis Hassabis',
+        meta: 'DeepMind 联合创始人',
+        desc: '将强化学习与大规模计算结合并应用于复杂对弈（如 AlphaGo）与科学发现任务，推动了智能系统的新方向。',
+        quote: '“把游戏解决掉，然后把那些学习带到现实世界。”'
+      }
+    ];
+
+    // ---------- Helpers ----------
+    function dbRef(path){ return ref(db, path); }
+    function generateRoomId(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
+    function updateNickUI(){ myNickLabel.textContent = myNick || '-'; }
+    function resetLocalBoard(){ board = Array.from({length:boardSize}, ()=> Array(boardSize).fill(null)); moveHistory=[]; appliedMoveKeys=new Set(); boardEl.querySelectorAll('.cell').forEach(c=>{ c.innerHTML=''; c.classList.remove('winning-piece'); }); updateUIStats(); }
+    function updateUIStats(){ turnLabel.textContent = (myRoomId && lastKnownState.currentPlayer) ? (lastKnownState.currentPlayer==='black' ? '黑方回合' : '白方回合') : '-'; moveCountLabel.textContent = '步: ' + moveHistory.length; statusLabel.textContent = (myRoomId && lastKnownState.gameOver) ? '对局结束' : (myRoomId ? '对弈中' : '未在房间'); roomIdLabel.textContent = myRoomId || '-'; ownerLabel.textContent = lastRoomMeta.ownerNick || lastRoomMeta.ownerId || '-'; }
+
+    // ---------- Board DOM ----------
+    function initBoardDOM(){
+      boardEl.innerHTML = '';
+      for(let r=0;r<boardSize;r++){
+        for(let c=0;c<boardSize;c++){
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.dataset.row = r; cell.dataset.col = c;
+          cell.addEventListener('click', handleCellClick);
+          boardEl.appendChild(cell);
+        }
+      }
+    }
+
+    function placePieceLocal(r,c,player){
+      if (board[r][c] !== null) return false;
+      board[r][c] = player;
+      const idx = r*boardSize + c;
+      const cell = boardEl.children[idx];
+      if (!cell) return false;
+      const piece = document.createElement('div');
+      piece.className = 'piece ' + player;
+      requestAnimationFrame(()=> {
+        cell.appendChild(piece);
+        setTimeout(()=> piece.classList.add('drop'), 10);
+      });
+      return true;
+    }
+
+    function removePieceLocal(r,c){
+      if (board[r][c] === null) return false;
+      board[r][c] = null;
+      const idx = r*boardSize + c;
+      const cell = boardEl.children[idx];
+      if (!cell) return false;
+      cell.innerHTML = '';
+      return true;
+    }
+
+    function markWinningPieces(coords){
+      coords.forEach(({r,c})=>{
+        const idx = r*boardSize + c;
+        const cell = boardEl.children[idx];
+        const p = cell && cell.querySelector('.piece');
+        if (p) p.classList.add('winning-piece');
+      });
+    }
+
+    function checkWinAndReturnCoords(r,c,player){
+      const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+      for (const [dx,dy] of dirs){
+        let coords = [{r,c}];
+        for (let i=1;i<=4;i++){ const nr=r+i*dx, nc=c+i*dy; if(nr>=0&&nr<boardSize&&nc>=0&&nc<boardSize&&board[nr][nc]===player) coords.push({r:nr,c:nc}); else break; }
+        for (let i=1;i<=4;i++){ const nr=r-i*dx, nc=c-i*dy; if(nr>=0&&nr<boardSize&&nc>=0&&nc<boardSize&&board[nr][nc]===player) coords.unshift({r:nr,c:nc}); else break; }
+        if (coords.length>=5) return coords;
+      }
+      return null;
+    }
+
+    // ---------- Connection monitor (fixed init & behavior) ----------
+    function startConnectionMonitor(){
+      try{ if (unsubConnected) unsubConnected(); }catch(e){}
+      const connRef = dbRef('.info/connected');
+      unsubConnected = onValue(connRef, (snap)=>{
+        const val = snap.val();
+        // val may be null on some envs -> treat null as false but keep explicit behavior
+        connected = !!val;
+        if (connected){
+          connDot.style.background = 'var(--online)';
+          connText.textContent = '🟢 已连接';
+          if (myRoomId){
+            setTimeout(()=> applyInitialRoomState(myRoomId).catch(()=>{}), 300);
+            appendSystemChat('✅ 已重新连接并同步对局');
+          }
+        } else {
+          connDot.style.background = 'var(--offline)';
+          connText.textContent = '🔴 离线，自动重连中…';
+          appendSystemChat('⚠️ 检测到断线，暂时禁止落子');
+        }
+      });
+    }
+
+    // ---------- Rooms list ----------
+    function startRoomsListener(){
+      try{ if (unsubRooms) unsubRooms(); }catch(e){}
+      // onValue returns an unsubscribe function; store it so we can stop it
+      unsubRooms = onValue(dbRef('rooms'), snap=>{
+        const data = snap.val() || {};
+        renderRoomsList(data);
+      });
+    }
+    function renderRoomsList(dataObj){
+      roomsList.innerHTML = '';
+      const arr = Object.entries(dataObj || {}).map(([k,v])=>({ id:k, ...v }));
+      arr.sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+      if (arr.length===0){ roomsList.innerHTML = '<div style="color:var(--muted)">暂无房间，创建一个吧</div>'; return; }
+      arr.forEach(room=>{
+        const players = room.players || {};
+        const count = Object.keys(players).length;
+        const item = document.createElement('div'); item.style.display='flex'; item.style.justifyContent='space-between'; item.style.alignItems='center'; item.style.marginBottom='8px';
+        const meta = document.createElement('div'); meta.style.display='flex'; meta.style.flexDirection='column';
+        const title = document.createElement('div'); title.style.fontWeight='800'; title.textContent = `房间 ${room.id}`;
+        const sub = document.createElement('div'); sub.className='chat-meta'; sub.textContent = `玩家: ${count}/2 · 创建: ${room.createdAt ? new Date(room.createdAt).toLocaleString() : '未知'}`;
+        meta.appendChild(title); meta.appendChild(sub);
+        const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px';
+        const enter = document.createElement('button'); enter.className='pill primary'; enter.textContent = count>=2 ? '已满' : '进入'; enter.disabled = count>=2;
+        enter.onclick = ()=> joinRoom(room.id);
+        const del = document.createElement('button'); del.className='pill ghost'; del.textContent='删除';
+        del.onclick = async ()=> { if(!confirm(`删除房间 ${room.id} ?`)) return; await remove(dbRef(`rooms/${room.id}`)); };
+        actions.appendChild(enter); actions.appendChild(del); item.appendChild(meta); item.appendChild(actions);
+        roomsList.appendChild(item);
+      });
+    }
+
+    // ---------- Per-room listeners ----------
+    function stopRoomListeners(){
+      try{ if (unsubPlayers) unsubPlayers(); }catch(e){}
+      try{ if (unsubState) unsubState(); }catch(e){}
+      try{ if (unsubMovesAdded) unsubMovesAdded(); }catch(e){}
+      try{ if (unsubMovesRemoved) unsubMovesRemoved(); }catch(e){}
+      try{ if (unsubChatsAdded) unsubChatsAdded(); }catch(e){}
+      try{ if (unsubUndoRequests) unsubUndoRequests(); }catch(e){}
+      unsubPlayers = unsubState = unsubMovesAdded = unsubMovesRemoved = unsubChatsAdded = unsubUndoRequests = null;
+      appliedMoveKeys = new Set();
+      moveHistory = [];
+    }
+
+    function startRoomListeners(id){
+      // players
+      const playersRef = dbRef(`rooms/${id}/players`);
+      try{ if (unsubPlayers) unsubPlayers(); }catch(e){}
+      unsubPlayers = onValue(playersRef, snap=>{
+        const players = snap.val() || {};
+        updatePlayersUI(players);
+      });
+
+      // state
+      const stateRef = dbRef(`rooms/${id}/state`);
+      try{ if (unsubState) unsubState(); }catch(e){}
+      unsubState = onValue(stateRef, snap=>{
+        const s = snap.val() || {};
+        lastKnownState = Object.assign({}, lastKnownState, s);
+        if (s.gameOver){
+          showVictoryFromState(s.winner);
+        } else {
+          hideVictory();
+        }
+        updateUIStats();
+      });
+
+      // moves added
+      const movesRef = dbRef(`rooms/${id}/moves`);
+      try{ if (unsubMovesAdded) unsubMovesAdded(); }catch(e){}
+      unsubMovesAdded = onChildAdded(movesRef, snap=>{
+        const k = snap.key; const m = snap.val();
+        if (!m) return;
+        if (appliedMoveKeys.has(k)) return;
+        appliedMoveKeys.add(k);
+        applyRemoteMove(m,k);
+      });
+
+      // moves removed
+      try{ if (unsubMovesRemoved) unsubMovesRemoved(); }catch(e){}
+      unsubMovesRemoved = onChildRemoved(movesRef, snap=>{
+        const k = snap.key; const m = snap.val();
+        if (!m) return;
+        if (appliedMoveKeys.has(k)){
+          appliedMoveKeys.delete(k);
+          const idx = moveHistory.findIndex(x=>x.key===k);
+          if (idx !== -1){
+            const mv = moveHistory.splice(idx,1)[0];
+            removePieceLocal(mv.row, mv.col);
+          } else {
+            removePieceLocal(m.row, m.col);
+          }
+          updateUIStats();
+        }
+      });
+
+      // chats
+      const chatsRef = dbRef(`rooms/${id}/chats`);
+      try{ if (unsubChatsAdded) unsubChatsAdded(); }catch(e){}
+      unsubChatsAdded = onChildAdded(chatsRef, snap=>{
+        const m = snap.val();
+        if (!m) return;
+        const t = new Date(m.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        appendChatLine(`[${t}] ${m.nick}: ${m.text}`);
+      });
+
+      // undo requests
+      const undoRef = dbRef(`rooms/${id}/requests/undo`);
+      try{ if (unsubUndoRequests) unsubUndoRequests(); }catch(e){}
+      unsubUndoRequests = onChildAdded(undoRef, async (snap)=>{
+        const key = snap.key; const req = snap.val();
+        if (!req) return;
+        if (req.from === myClientId) return; // ignore own
+        if (req.status && req.status !== 'pending') return;
+        const who = req.nick || '对方';
+        const agree = confirm(`${who} 请求悔棋：是否同意撤销他们的最后一步？（同意后将删除最后一步）`);
+        if (agree){
+          const movesSnap = await get(dbRef(`rooms/${myRoomId}/moves`));
+          const moves = movesSnap.val() || {};
+          const keys = Object.keys(moves).sort();
+          if (keys.length === 0){
+            await set(dbRef(`rooms/${myRoomId}/requests/undo/${key}/status`), 'accepted');
+            await push(dbRef(`rooms/${myRoomId}/chats`), { nick:'系统', text: `${myNick||'玩家'} 同意了悔棋，但棋步为空。`, timestamp: Date.now() });
+          } else {
+            const lastKey = keys[keys.length-1];
+            const lastMove = moves[lastKey];
+            if (lastMove && lastMove.clientId === req.from){
+              await remove(dbRef(`rooms/${myRoomId}/moves/${lastKey}`));
+              await set(dbRef(`rooms/${myRoomId}/requests/undo/${key}/status`), 'accepted');
+              await set(dbRef(`rooms/${myRoomId}/state/currentPlayer`), lastMove.player);
+              await push(dbRef(`rooms/${myRoomId}/chats`), { nick:'系统', text: `${myNick||'玩家'} 同意并撤销了 ${req.nick||'对方'} 的最后一步。`, timestamp: Date.now() });
+            } else {
+              await set(dbRef(`rooms/${myRoomId}/requests/undo/${key}/status`), 'rejected');
+              await push(dbRef(`rooms/${myRoomId}/chats`), { nick:'系统', text: `${myNick||'玩家'} 拒绝悔棋（最后一步不是请求者所下）。`, timestamp: Date.now() });
+            }
+          }
+        } else {
+          await set(dbRef(`rooms/${myRoomId}/requests/undo/${key}/status`), 'rejected');
+          await push(dbRef(`rooms/${myRoomId}/chats`), { nick:'系统', text: `${myNick||'玩家'} 拒绝了悔棋请求。`, timestamp: Date.now() });
+        }
+      });
+    }
+
+    function updatePlayersUI(playersObj){
+      const list = Object.entries(playersObj || {}).map(([id,p])=>({ id, ...p }));
+      let black = null, white = null;
+      list.forEach(p=>{ if (p.slot==='black') black=p; if (p.slot==='white') white=p; });
+      blackName.textContent = black ? (black.nick||black.clientId) : '黑方（空）';
+      whiteName.textContent = white ? (white.nick||white.clientId) : '白方（空）';
+      blackId.textContent = black ? `ID: ${black.clientId}` : '';
+      whiteId.textContent = white ? `ID: ${white.clientId}` : '';
+      updateUIStats();
+    }
+
+    async function applyInitialRoomState(roomId){
+      resetLocalBoard();
+      const movesSnap = await get(dbRef(`rooms/${roomId}/moves`));
+      const moves = movesSnap.val() || {};
+      const keys = Object.keys(moves).sort();
+      for (const k of keys){
+        const m = moves[k];
+        if(!m) continue;
+        if(!appliedMoveKeys.has(k)){
+          appliedMoveKeys.add(k);
+          placePieceLocal(m.row, m.col, m.player);
+          moveHistory.push({ row:m.row, col:m.col, player:m.player, key:k });
+        }
+      }
+      const metaSnap = await get(dbRef(`rooms/${roomId}/meta`));
+      lastRoomMeta = metaSnap.val() || {};
+      const stateSnap = await get(dbRef(`rooms/${roomId}/state`));
+      lastKnownState = stateSnap.val() || lastKnownState;
+      updateUIStats();
+      renderChatOnce(roomId);
+    }
+
+    async function renderChatOnce(roomId){
+      chatLog.innerHTML = '';
+      const chatsSnap = await get(dbRef(`rooms/${roomId}/chats`));
+      const chats = chatsSnap.val() || {};
+      const entries = Object.entries(chats || []).sort((a,b)=> (a[1].timestamp||0) - (b[1].timestamp||0));
+      entries.forEach(([k,m])=>{
+        const t = new Date(m.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        appendChatLine(`[${t}] ${m.nick}: ${m.text}`);
+      });
+    }
+
+    function applyRemoteMove(m, key){
+      placePieceLocal(m.row, m.col, m.player);
+      moveHistory.push({ row:m.row, col:m.col, player:m.player, key });
+      const coords = checkWinAndReturnCoords(m.row, m.col, m.player);
+      if (coords){
+        markWinningPieces(coords);
+      }
+      updateUIStats();
+    }
+
+    function appendChatLine(text){
+      const d = document.createElement('div'); d.className='chat-row'; d.textContent = text; chatLog.appendChild(d);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function appendSystemChat(msg){
+      if (!myRoomId) return;
+      push(dbRef(`rooms/${myRoomId}/chats`), { nick:'系统', text: msg, timestamp: Date.now() }).catch(()=>{});
+    }
+
+    // ---------- Interactions ----------
+    createRoomBtn.addEventListener('click', async ()=>{
+      if (!myNick) return alert('请先设置昵称');
+      // stop rooms listener temporarily to avoid double-render / race
+      try { if (typeof unsubRooms === 'function') { unsubRooms(); unsubRooms = null; } } catch(e){}
+      const id = (roomInput.value && roomInput.value.trim()) ? roomInput.value.trim().toUpperCase() : generateRoomId();
+      const roomRef = dbRef(`rooms/${id}`);
+      const snap = await get(roomRef);
+      if (snap.exists()){
+        alert('房间已存在，请换个房间号');
+        // restart rooms listener if stopped
+        try { if (!unsubRooms) startRoomsListener(); } catch(e){}
+        return;
+      }
+      await set(roomRef, { createdAt: Date.now(), id, createdBy: myClientId });
+      await set(dbRef(`rooms/${id}/meta`), { ownerId: myClientId, ownerNick: myNick });
+      await set(dbRef(`rooms/${id}/state`), { currentPlayer:'black', gameOver:false, winner:null, lastMoveKey:null });
+      await set(dbRef(`rooms/${id}/players/${myClientId}`), { slot:'black', clientId: myClientId, nick: myNick, joinedAt: Date.now() });
+      myRoomId = id; mySlot = 'black'; lastRoomMeta = { ownerId: myClientId, ownerNick: myNick };
+      startRoomListeners(id);
+      await applyInitialRoomState(id);
+      enterGameScene();
+    });
+
+    refreshRoomsBtn.addEventListener('click', ()=> startRoomsListener());
+
+    saveNickBtn.addEventListener('click', ()=> {
+      const v = (nickInput.value||'').trim();
+      if (!v) return alert('请输入昵称');
+      myNick = v; localStorage.setItem('g_nick', myNick); updateNickUI();
+    });
+
+    sendChatBtn.addEventListener('click', async ()=>{
+      const txt = (chatInput.value||'').trim();
+      if (!txt) return;
+      if (!myRoomId) return alert('未在房间');
+      try {
+        await push(dbRef(`rooms/${myRoomId}/chats`), { nick: myNick||('玩家'+myClientId.slice(-4)), text: txt, timestamp: Date.now() });
+        chatInput.value = '';
+      } catch(e){ console.error('chat push err', e); alert('发送失败'); }
+    });
+
+    async function handleCellClick(e){
+      const r = parseInt(e.currentTarget.dataset.row), c = parseInt(e.currentTarget.dataset.col);
+      if (!myRoomId) return alert('请先创建或进入房间');
+      if (!connected) return alert('当前离线，无法落子');
+      if (board[r][c] !== null) return;
+      if (mySlot !== 'black' && mySlot !== 'white') return alert('你是观战者，无法落子');
+      const stateSnap = await get(dbRef(`rooms/${myRoomId}/state`));
+      const s = stateSnap.val() || {};
+      const turn = s.currentPlayer || 'black';
+      if (s.gameOver) return alert('对局已结束');
+      if (turn !== mySlot) return alert('当前不是你的回合');
+      placePieceLocal(r,c,mySlot);
+      try {
+        const pushRef = await push(dbRef(`rooms/${myRoomId}/moves`), { row:r, col:c, player:mySlot, clientId: myClientId, nick: myNick, timestamp: Date.now() });
+        const next = (mySlot === 'black') ? 'white' : 'black';
+        await set(dbRef(`rooms/${myRoomId}/state/currentPlayer`), next);
+        await set(dbRef(`rooms/${myRoomId}/state/lastMoveKey`), pushRef.key);
+        const coords = checkWinAndReturnCoords(r,c,mySlot);
+        if (coords){
+          await set(dbRef(`rooms/${myRoomId}/state`), { currentPlayer: next, gameOver:true, winner: mySlot, lastMoveKey: pushRef.key });
+          await push(dbRef(`rooms/${myRoomId}/chats`), { nick: '系统', text: `${myNick||'某玩家'} 获胜！`, timestamp: Date.now() });
+        }
+      } catch(e){
+        console.error('push move err', e);
+        alert('落子失败：' + (e.message || e));
+      }
+    }
+
+    // ---------- Request undo ----------
+    requestUndoBtn.addEventListener('click', async ()=>{
+      if (!myRoomId) return alert('未在房间');
+      if (!connected) return alert('离线状态不可申请悔棋');
+      try {
+        const reqRef = push(dbRef(`rooms/${myRoomId}/requests/undo`));
+        await set(reqRef, { from: myClientId, nick: myNick, timestamp: Date.now(), status: 'pending' });
+        await push(dbRef(`rooms/${myRoomId}/chats`), { nick:'系统', text: `${myNick||'玩家'} 发起了悔棋请求，等待对方确认。`, timestamp: Date.now() });
+        alert('悔棋请求已发送，等待对方确认');
+      } catch(e){ console.error('undo request err', e); alert('申请失败'); }
+    });
+
+    // ---------- Restart / Leave ----------
+    restartBtn.addEventListener('click', async ()=>{
+      if (!myRoomId) return alert('未在房间');
+      const metaSnap = await get(dbRef(`rooms/${myRoomId}/meta`));
+      const meta = metaSnap.val() || {};
+      if (meta.ownerId !== myClientId) return alert('只有房主可以重开');
+      if (!confirm('确认重开？')) return;
+      try {
+        await remove(dbRef(`rooms/${myRoomId}/moves`));
+        await set(dbRef(`rooms/${myRoomId}/state`), { currentPlayer:'black', gameOver:false, winner:null, lastMoveKey:null });
+        await remove(dbRef(`rooms/${myRoomId}/chats`));
+        resetLocalBoard();
+        appendSystemChat('房主已重开新的对局');
+      } catch(e){ console.error('restart err', e); alert('重开失败'); }
+    });
+
+    leaveBtn.addEventListener('click', async ()=>{
+      if (!myRoomId) return alert('未在房间');
+      if (!confirm('确定要退出房间吗？')) return;
+      try { await remove(dbRef(`rooms/${myRoomId}/players/${myClientId}`)); } catch(e){}
+      stopRoomListeners();
+      myRoomId = null; mySlot = null;
+      resetLocalBoard();
+      exitGameScene();
+      startRoomsListener();
+    });
+
+    // ---------- Victory flow: show modal, confetti, sound, knowledge card ----------
+    function showVictoryFromState(winner){
+      if (!winner) return;
+      victoryMessage.textContent = `${winner === 'black' ? '黑方' : '白方'} 获胜！`;
+      // show victory modal
+      victoryModal.style.display = 'block';
+      // play sound
+      playVictorySound();
+      // confetti
+      startConfetti();
+      // auto show knowledge card after short delay
+      setTimeout(()=> {
+        showKnowledgeCard();
+      }, 900);
+    }
+    function hideVictory(){ victoryModal.style.display = 'none'; stopConfetti(); }
+
+    closeVictoryBtn.addEventListener('click', ()=>{ hideVictory(); });
+
+    // show knowledge modal picking random card
+    function showKnowledgeCard(){
+      const card = knowledgeCards[Math.floor(Math.random()*knowledgeCards.length)];
+      if (!card) return;
+      // fill modal
+      kAvatar.textContent = card.name.split(' ').map(s=>s[0]).slice(0,2).join('');
+      kName.textContent = card.name;
+      kMeta.textContent = card.meta;
+      kDesc.textContent = card.desc;
+      kQuote.textContent = `“${card.quote}”`;
+      // show
+      knowledgeModal.classList.add('show');
+      knowledgeModal.style.display = 'block';
+    }
+    closeKBtn.addEventListener('click', ()=>{ knowledgeModal.classList.remove('show'); setTimeout(()=> knowledgeModal.style.display='none',220); });
+    shareKBtn.addEventListener('click', ()=>{
+      const text = `${kName.textContent}\n${kMeta.textContent}\n\n${kDesc.textContent}\n\n${kQuote.textContent}`;
+      navigator.clipboard?.writeText(text).then(()=> alert('已复制到剪贴板'), ()=> alert('复制失败'));
+    });
+    showKnowledgeBtn.addEventListener('click', showKnowledgeCard);
+
+    // ---------- Confetti (simple canvas) ----------
+    const confettiCtx = confettiCanvas.getContext && confettiCanvas.getContext('2d');
+    let confettiParticles = [], confettiRunning=false;
+    function resizeConfetti(){ confettiCanvas.width = window.innerWidth; confettiCanvas.height = window.innerHeight; }
+    window.addEventListener('resize', resizeConfetti);
+    resizeConfetti();
+
+    function startConfetti(){
+      if (!confettiCtx) return;
+      confettiParticles = [];
+      const colors = ['#FF6B6B','#FFD93D','#6BCB77','#4D96FF','#9B5DE5'];
+      for (let i=0;i<80;i++){
+        confettiParticles.push({
+          x: Math.random()*confettiCanvas.width,
+          y: Math.random()*-confettiCanvas.height,
+          w: 6 + Math.random()*10,
+          h: 8 + Math.random()*12,
+          vx: -1 + Math.random()*2,
+          vy: 2 + Math.random()*4,
+          r: Math.random()*360,
+          color: colors[Math.floor(Math.random()*colors.length)],
+          spin: (Math.random()*6-3)
+        });
+      }
+      if (!confettiRunning) { confettiRunning = true; requestAnimationFrame(confettiFrame); }
+      setTimeout(()=> stopConfetti(), 6000);
+    }
+    function stopConfetti(){ confettiRunning = false; confettiCtx && confettiCtx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height); }
+    function confettiFrame(){
+      if (!confettiRunning){ if (confettiCtx) confettiCtx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height); return; }
+      confettiCtx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+      confettiParticles.forEach(p=>{
+        p.x += p.vx; p.y += p.vy; p.vy += 0.02; p.r += p.spin;
+        confettiCtx.save();
+        confettiCtx.translate(p.x,p.y);
+        confettiCtx.rotate(p.r * Math.PI/180);
+        confettiCtx.fillStyle = p.color;
+        confettiCtx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+        confettiCtx.restore();
+      });
+      confettiParticles = confettiParticles.filter(p=>p.y < confettiCanvas.height + 50);
+      if (confettiParticles.length === 0) { confettiRunning=false; return; }
+      requestAnimationFrame(confettiFrame);
+    }
+
+    // ---------- Victory sound (WebAudio short cheer) ----------
+    function playVictorySound(){
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(440, ctx.currentTime);
+        o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0, ctx.currentTime);
+        g.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.01);
+        o.start();
+        o.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.18);
+        setTimeout(()=> { g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4); o.stop(ctx.currentTime + 0.5); }, 300);
+      } catch(e){ console.warn('audio err', e); }
+    }
+
+    // ---------- Join / create / leave / listeners bootstrap ----------
+    function enterGameScene(){ document.getElementById('lobbyScene').classList.remove('visible'); document.getElementById('gameScene').classList.add('visible'); updateUIStats(); }
+    function exitGameScene(){ document.getElementById('gameScene').classList.remove('visible'); document.getElementById('lobbyScene').classList.add('visible'); }
+
+    async function joinRoom(requestedRoomId){
+      if (!myNick) return alert('请先设置昵称');
+      if (myRoomId) await leaveRoom();
+      // stop rooms listener temporarily to avoid double-render / race
+      try { if (typeof unsubRooms === 'function') { unsubRooms(); unsubRooms = null; } } catch(e){}
+      const id = (requestedRoomId && requestedRoomId.trim()) ? requestedRoomId.trim().toUpperCase() : generateRoomId();
+      myRoomId = id;
+      const roomRef = dbRef(`rooms/${id}`);
+      const snap = await get(roomRef);
+      if (!snap.exists()){
+        await set(roomRef, { createdAt: Date.now(), id, createdBy: myClientId });
+        await set(dbRef(`rooms/${id}/meta`), { ownerId: myClientId, ownerNick: myNick });
+        await set(dbRef(`rooms/${id}/state`), { currentPlayer:'black', gameOver:false, winner:null, lastMoveKey:null });
+      } else {
+        const metaSnap = await get(dbRef(`rooms/${id}/meta`));
+        if (!metaSnap.exists()){
+          await set(dbRef(`rooms/${id}/meta`), { ownerId: myClientId, ownerNick: myNick });
+        }
+      }
+      const playersSnap = await get(dbRef(`rooms/${id}/players`));
+      const playersObj = playersSnap.val() || {};
+      const slots = Object.values(playersObj || {}).map(p=>p.slot);
+      let desired = 'spectator';
+      if (!slots.includes('black')) desired = 'black';
+      else if (!slots.includes('white')) desired = 'white';
+      await set(dbRef(`rooms/${id}/players/${myClientId}`), { slot: desired, clientId: myClientId, nick: myNick, joinedAt: Date.now() });
+      mySlot = desired;
+      const metaSnap2 = await get(dbRef(`rooms/${id}/meta`));
+      lastRoomMeta = metaSnap2.val() || {};
+      startRoomListeners(id);
+      await applyInitialRoomState(id);
+      enterGameScene();
+    }
+
+    async function leaveRoom(){
+      if (!myRoomId) return;
+      try { await remove(dbRef(`rooms/${myRoomId}/players/${myClientId}`)); } catch(e){}
+      stopRoomListeners();
+      myRoomId = null; mySlot = null;
+      resetLocalBoard();
+      exitGameScene();
+      // restart lobby listener
+      startRoomsListener();
+    }
+
+    // ---------- Event bindings ----------
+    document.getElementById('btnGotoLobby').addEventListener('click', ()=> exitGameScene());
+    document.getElementById('btnGotoGame').addEventListener('click', ()=> { if (!myRoomId) return alert('请先创建或进入房间'); enterGameScene(); });
+    document.getElementById('showKnowledgeBtn').addEventListener('click', showKnowledgeCard);
+
+    // ---------- Bootstrapping ----------
+    (async function bootstrap(){
+      initBoardDOM();
+      resetLocalBoard();
+      myNick = myNick || ('玩家_' + myClientId.slice(-4));
+      updateNickUI();
+      startConnectionMonitor();
+      try { await get(dbRef('/')); document.getElementById('dbStatus') && (document.getElementById('dbStatus').textContent = '已连接 Firebase'); } catch(e){ document.getElementById('dbStatus') && (document.getElementById('dbStatus').textContent = '无法连接 Firebase：' + (e && e.message ? e.message : '网络/权限问题')); console.error(e); }
+      startRoomsListener();
+      window.addEventListener('beforeunload', async ()=>{ try { if (myRoomId && myClientId) await remove(dbRef(`rooms/${myRoomId}/players/${myClientId}`)); } catch(e){} });
+    })();
+
+    // ---------- Unload cleanup ----------
+    window.addEventListener('beforeunload', async ()=>{ try { if (myRoomId && myClientId) await remove(dbRef(`rooms/${myRoomId}/players/${myClientId}`)); } catch(e){} });
+
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
