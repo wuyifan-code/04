@@ -82,10 +82,105 @@
       from { opacity: 0.3; text-shadow:0 0 12px rgba(255,60,60,0.4);}
       to   { opacity: 0.9; text-shadow:0 0 48px rgba(255,0,0,0.9);}
     }
-    @media (max-width:720px){
-      .board-wrap{width:90vw;height:90vw}
+    @media (max-width:1024px){
+      /* 平板设备适配 */
+      .container{padding:12px}
+      .topbar{padding:10px 14px}
+      .brand{gap:8px}
+      .logo{width:40px;height:40px}
+      .card{padding:14px}
+      .board-wrap{width:70vw;height:70vw;max-width:500px;max-height:500px}
+      #countdownOverlay{font-size:80px}
+    }
+    
+    @media (max-width:768px){
+      /* 手机设备适配 - 主要布局调整 */
+      .container{padding:8px}
+      .nav .pill{padding:6px 8px;font-size:0.9rem}
+      .card{padding:12px}
+      
+      /* 游戏场景改为垂直堆叠布局 */
+      .card > div{flex-direction:column !important}
+      
+      /* 玩家信息区域 */
+      .card > div > div:first-child{width:100% !important;display:flex;flex-direction:row;justify-content:space-between;align-items:flex-start}
+      .player-row{flex:1}
+      
+      /* 对弈区 */
+      .board-wrap{width:95vw;height:95vw;max-width:400px;max-height:400px}
+      
+      /* 聊天区域 */
+      .card > div > div:last-child{width:100% !important;max-height:200px}
+      .chat-log{height:120px}
+      
+      /* 倒计时样式 */
       #countdownOverlay{font-size:64px}
-      .kcard{flex-direction:column;align-items:center}.k-avatar{width:96px;height:96px}
+      
+      /* 按钮和输入框调整 */
+      .pill{padding:8px 12px;font-size:0.9rem}
+      input[type="text"]{padding:8px 10px;font-size:0.95rem}
+      
+      /* 知识卡片改为垂直布局 */
+      .kcard{flex-direction:column;align-items:center}
+      .k-avatar{width:96px;height:96px}
+    }
+    
+    @media (max-width:480px){
+      /* 小屏幕手机优化 */
+      .board-wrap{width:95vw;height:95vw}
+      #countdownOverlay{font-size:50px}
+      .brand > div > div:first-child{font-size:1rem}
+      .brand > div > div:last-child{font-size:0.8rem}
+      .pill{padding:7px 10px;font-size:0.85rem}
+      input[type="text"]{padding:7px 8px;font-size:0.9rem}
+      .kcard{padding:14px}
+      .modal{padding:16px !important}
+    }
+    
+    /* 大厅页面响应式优化 */
+    @media (max-width:768px){
+      /* 大厅布局改为垂直堆叠 */
+      #lobbyScene .card > div{flex-direction:column !important}
+      /* 输入框和按钮区域调整 */
+      #lobbyScene .card > div > div:first-child > div:first-child{display:flex;flex-direction:column;gap:8px}
+      #roomInput{width:100%}
+      /* 右侧信息面板调整 */
+      #lobbyScene .card > div > div:last-child{width:100% !important}
+      #nickInput{width:100%}
+      /* 房间列表调整 */
+      #roomsList{max-height:40vh}
+    }
+    
+    /* 触摸设备优化 */
+    @media (hover:none) and (pointer:coarse) {
+      .cell{cursor:default}
+      .pill{padding:10px 16px;/* 增大触摸区域 */}
+      .nav .pill{padding:10px 14px}
+      
+      /* 触摸反馈 */
+      .pill:active{transform:scale(0.96);transition:transform 0.1s}
+      .cell:active::before, .cell:active::after{background-color:rgba(192,138,63,0.4)}
+    }
+    
+    /* 移动设备交互优化 */
+    @media (max-width:768px){
+      /* 输入框焦点样式优化 */
+      input[type="text"]:focus{
+        outline:none;
+        border-color:var(--accent);
+        box-shadow:0 0 0 2px rgba(192,138,63,0.2);
+      }
+      
+      /* 减少边框和阴影以适应小屏幕 */
+      .card{
+        border:1px solid rgba(255,255,255,0.7);
+        box-shadow:0 6px 20px rgba(0,0,0,0.08);
+      }
+      
+      /* 适配小屏幕的字体大小 */
+      h2{font-size:1.5rem}
+      .k-name, .k-quote{font-size:1rem}
+      .k-desc{font-size:0.9rem}
     }
   </style>
 </head>
@@ -1031,12 +1126,6 @@
   </script>
 </body>
 </html>
-
-
-
-
-
-
 
 
 
