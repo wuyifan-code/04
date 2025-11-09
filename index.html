@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>笨狗小柴 五子棋 v10.2.1 — 稳定修正版（带倒计时与知识卡片抽牌）</title>
+  <title>笨狗小柴 五子棋 v10.3 — 倒计时居中大字版</title>
   <style>
     :root{
       --bg:#f6f3ee; --glass:rgba(255,255,255,0.62); --wood:#caa46b; --dark-wood:#8b6a3f;
@@ -26,7 +26,8 @@
     .pill{padding:9px 14px;border-radius:999px;border:0;cursor:pointer;font-weight:800}
     .pill.primary{background:linear-gradient(180deg,var(--accent),var(--dark-wood));color:white}
     .pill.ghost{background:white;border:1px solid rgba(0,0,0,0.06)}
-    .board{width:640px;height:640px;border-radius:12px;background:linear-gradient(180deg,#ead5b5,#d4b88c);border:6px solid rgba(202,164,107,0.9);display:grid;grid-template-columns:repeat(15,1fr);grid-template-rows:repeat(15,1fr);box-shadow:0 18px 70px rgba(0,0,0,0.12);position:relative;overflow:hidden}
+    .board-wrap{position:relative;width:640px;height:640px}
+    .board{width:100%;height:100%;border-radius:12px;background:linear-gradient(180deg,#ead5b5,#d4b88c);border:6px solid rgba(202,164,107,0.9);display:grid;grid-template-columns:repeat(15,1fr);grid-template-rows:repeat(15,1fr);box-shadow:0 18px 70px rgba(0,0,0,0.12);position:relative;overflow:hidden}
     .cell{position:relative;cursor:pointer;user-select:none}
     .cell::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(0,0,0,0.18);transform:translateY(-50%)}
     .cell::after{content:'';position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(0,0,0,0.18);transform:translateX(-50%)}
@@ -59,7 +60,33 @@
     /* turn timer glow */
     .turn-glow{animation:glowPulse 1s infinite}
     @keyframes glowPulse{0%{box-shadow:0 0 0 rgba(192,138,63,0)}50%{box-shadow:0 0 20px rgba(192,138,63,0.4)}100%{box-shadow:0 0 0 rgba(192,138,63,0)}}
-    @media (max-width:640px){.kcard{flex-direction:column;align-items:center}.k-avatar{width:96px;height:96px}}
+    /* centered countdown overlay */
+    #countdownOverlay{
+      position:absolute;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%) scale(1);
+      font-size:120px;
+      font-weight:900;
+      color:#333;
+      opacity:0.15;
+      text-shadow:0 0 20px rgba(0,0,0,0.3);
+      pointer-events:none;
+      transition:all 0.22s ease;
+      z-index:40;
+    }
+    #countdownOverlay.flash {
+      animation: flashGlow 0.5s infinite alternate;
+    }
+    @keyframes flashGlow {
+      from { opacity: 0.3; text-shadow:0 0 12px rgba(255,60,60,0.4);}
+      to   { opacity: 0.9; text-shadow:0 0 48px rgba(255,0,0,0.9);}
+    }
+    @media (max-width:720px){
+      .board-wrap{width:90vw;height:90vw}
+      #countdownOverlay{font-size:64px}
+      .kcard{flex-direction:column;align-items:center}.k-avatar{width:96px;height:96px}
+    }
   </style>
 </head>
 <body>
@@ -69,7 +96,7 @@
         <div class="logo">柴</div>
         <div>
           <div style="font-weight:900">笨狗小柴 五子棋</div>
-          <div style="color:var(--muted);font-size:0.9rem">v10.2.1 · 稳定修正版</div>
+          <div style="color:var(--muted);font-size:0.9rem">v10.3 · 倒计时居中显示</div>
         </div>
       </div>
 
@@ -104,7 +131,7 @@
                 <button id="saveNickBtn" class="pill primary">保存</button>
               </div>
               <div style="color:var(--muted)">当前昵称: <span id="myNick">-</span></div>
-              <div style="margin-top:12px;color:var(--muted)">说明：胜利后会弹出知识卡片，包含 AI 大师简介与名言（房间级随机抽取，出完再重置）。</div>
+              <div style="margin-top:12px;color:var(--muted)">说明：胜利后会弹出知识卡片（房间级牌堆，出完重置）。</div>
             </div>
           </div>
         </div>
@@ -139,7 +166,11 @@
               </div>
             </div>
 
-            <div class="board" id="board"></div>
+            <!-- board wrap includes centered countdown overlay -->
+            <div class="board-wrap">
+              <div class="board" id="board"></div>
+              <div id="countdownOverlay">20</div>
+            </div>
           </div>
 
           <div style="width:320px;display:flex;flex-direction:column;gap:8px">
@@ -254,6 +285,7 @@
     const shareKBtn = document.getElementById('shareKBtn');
     const closeKBtn = document.getElementById('closeKBtn');
     const confettiCanvas = document.getElementById('confettiCanvas');
+    const countdownOverlay = document.getElementById('countdownOverlay');
 
     // ---------- State ----------
     const boardSize = 15;
@@ -583,25 +615,41 @@
     let localBeepCtx = null;
     function startLocalTurnTimer(turnExpiresAt, currentPlayer){
       stopLocalTurnTimer();
+      const overlay = document.getElementById('countdownOverlay');
       const tick = ()=>{
         const now = Date.now();
         const remaining = Math.max(0, Math.ceil((turnExpiresAt - now)/1000));
         turnTimerEl.textContent = remaining > 0 ? `${remaining}s` : '0s';
-        // last 5 seconds visual+sound cues
+
+        // 更新中央倒计时 overlay
+        if (overlay) {
+          overlay.textContent = remaining > 0 ? remaining : '';
+          overlay.style.opacity = remaining > 0 ? 0.15 : 0;
+          overlay.style.color = remaining <= 5 ? '#d83b3b' : '#333';
+          overlay.style.textShadow = remaining <= 5 ? 
+            '0 0 40px rgba(255,60,60,0.6)' : '0 0 20px rgba(0,0,0,0.3)';
+          overlay.style.transform = remaining <= 5 
+            ? 'translate(-50%,-50%) scale(1.28)' 
+            : 'translate(-50%,-50%) scale(1)';
+          if (remaining <= 5 && remaining > 0) overlay.classList.add('flash'); else overlay.classList.remove('flash');
+        }
+
+        // 最后5秒视觉 + 声音提示
         if (remaining <= 5 && remaining > 0){
           turnLabel.classList.add('turn-glow');
-          playBeep(remaining); // play beep for each second (best-effort)
+          playBeep(remaining);
         } else {
           turnLabel.classList.remove('turn-glow');
         }
+
         if (now >= turnExpiresAt){
           stopLocalTurnTimer();
+          if (overlay) { overlay.style.opacity = 0; overlay.classList.remove('flash'); }
           turnTimerEl.textContent = '0s';
-          // auto-skip: attempt to switch turn (only one client will succeed in writing)
           handleTurnTimeout(currentPlayer).catch(()=>{});
           return;
         }
-        localTimerId = setTimeout(tick, 300);
+        localTimerId = setTimeout(tick, 250);
       };
       tick();
     }
@@ -609,6 +657,7 @@
       if (localTimerId) clearTimeout(localTimerId);
       localTimerId = null;
       turnLabel.classList.remove('turn-glow');
+      if (countdownOverlay) { countdownOverlay.classList.remove('flash'); countdownOverlay.style.opacity = 0; }
     }
     function playBeep(whichSecond){
       try {
@@ -747,7 +796,7 @@
     });
 
     leaveBtn.addEventListener('click', async ()=>{
-      if (!myRoomId) return alert('未在房间');
+      if (!myRoomId) return alert('确定要退出房间吗？');
       if (!confirm('确定要退出房间吗？')) return;
       try { await remove(dbRef(`rooms/${myRoomId}/players/${myClientId}`)); } catch(e){}
       stopRoomListeners();
@@ -903,7 +952,7 @@
         // write back deckRemaining and lastKnowledge
         await set(dbRef(`rooms/${roomId}/deckRemaining`), deck);
         await set(dbRef(`rooms/${roomId}/lastKnowledge`), { cardId, recipient, assignedAt: Date.now(), assignedBy: myClientId, winner: winnerSlot });
-        // if deck is now empty after pop, we keep it empty until next cycle; when someone needs a new deck we reinit (above)
+        // if deck is now empty after pop, it will be reinitialized on next need
       } catch(e){ console.warn('assign knowledge err', e); }
     }
 
@@ -971,7 +1020,7 @@
       myNick = myNick || ('玩家_' + myClientId.slice(-4));
       updateNickUI();
       startConnectionMonitor();
-      try { await get(dbRef('/')); document.getElementById('dbStatus') && (document.getElementById('dbStatus').textContent = '已连接 Firebase'); } catch(e){ document.getElementById('dbStatus') && (document.getElementById('dbStatus').textContent = '无法连接 Firebase：' + (e && e.message ? e.message : '网络/权限问题')); console.error(e); }
+      try { await get(dbRef('/')); } catch(e){ console.error(e); }
       startRoomsListener();
       window.addEventListener('beforeunload', async ()=>{ try { if (myRoomId && myClientId) await remove(dbRef(`rooms/${myRoomId}/players/${myClientId}`)); } catch(e){} });
     })();
@@ -982,6 +1031,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 
